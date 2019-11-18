@@ -22,6 +22,8 @@
         <module>microprofile-metrics</module>
         <module>server-utilities</module>
         <module>microprofile-jwt-auth-tool</module>
+        <module>microprofile-open-api</module>
+        <module>microprofile-fault-tolerance</module>
     </modules>
 
     <properties>
@@ -43,6 +45,13 @@
         <version.com.google.code.gson>2.8.6</version.com.google.code.gson>
         <version.com.fasterxml.jackson.core.jackson-databind>2.9.9.1</version.com.fasterxml.jackson.core.jackson-databind>
         <version.org.glassfish.javax.json>1.1</version.org.glassfish.javax.json>
+        <version.org.assertj.assertj-core>3.12.2</version.org.assertj.assertj-core>
+        <version.com.google.code.gson>2.8.5</version.com.google.code.gson>
+        <version.org.awaitility>3.1.6</version.org.awaitility>
+        <version.com.google.guava>25.0-jre</version.com.google.guava>
+        <version.io.jaegertracing.everything>0.35.5</version.io.jaegertracing.everything>
+        <version.org.wildfly.extras.creaper>1.6.1</version.org.wildfly.extras.creaper>
+        <version.jakarta.platform.jakarta.jakartaee-api>8.0.0</version.jakarta.platform.jakarta.jakartaee-api>
     </properties>
 
     <dependencyManagement>
@@ -52,6 +61,13 @@
                 <artifactId>microprofile</artifactId>
                 <version>${version.org.eclipse.microprofile}</version>
                 <type>pom</type>
+                <scope>provided</scope>
+            </dependency>
+            <!-- Added for servlets, might be too much -->
+            <dependency>
+                <groupId>jakarta.platform</groupId>
+                <artifactId>jakarta.jakartaee-api</artifactId>
+                <version>8.0.0</version>
                 <scope>provided</scope>
             </dependency>
             <dependency>
@@ -148,6 +164,18 @@
                 <artifactId>javax.json</artifactId>
                 <version>${version.org.glassfish.javax.json}</version>
                 <scope>test</scope>
+            </dependency>
+            <!-- Awaitility is a small Java DSL for synchronizing (waiting for) asynchronous operations. It makes it easy to test asynchronous code. -->
+            <dependency>
+                <groupId>org.awaitility</groupId>
+                <artifactId>awaitility</artifactId>
+                <version>${version.org.awaitility}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>junit</groupId>
+                        <artifactId>junit</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
         </dependencies>
     </dependencyManagement>
