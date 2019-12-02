@@ -16,7 +16,6 @@ public class ManagementClientProvider {
 
     /**
      * Creates {@link OnlineManagementClient} for <b>standalone</b> mode, based on {@link ArquillianContainerProperties}
-     * obtained from {@link ArquillianDescriptorWrapper}
      *
      * @return Initialized {@link OnlineManagementClient} instance, don't forget to close it
      * @throws ConfigurationException Wraps exceptions thrown by the internal operation executed by

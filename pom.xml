@@ -22,8 +22,7 @@
         <module>microprofile-metrics</module>
         <module>server-utilities</module>
         <module>microprofile-jwt-auth-tool</module>
-        <module>microprofile-open-api</module>
-        <module>microprofile-fault-tolerance</module>
+        <module>tooling-cpu-load</module>
     </modules>
 
     <properties>
@@ -43,15 +42,16 @@
         <version.org.wildfly.extras.creaper>1.6.1</version.org.wildfly.extras.creaper>
         <version.org.yaml.snakeyaml>1.24</version.org.yaml.snakeyaml>
         <version.com.google.code.gson>2.8.6</version.com.google.code.gson>
-        <version.com.fasterxml.jackson.core.jackson-databind>2.9.9.1</version.com.fasterxml.jackson.core.jackson-databind>
+        <version.com.fasterxml.jackson.core.jackson-databind>2.9.9.1
+        </version.com.fasterxml.jackson.core.jackson-databind>
         <version.org.glassfish.javax.json>1.1</version.org.glassfish.javax.json>
         <version.org.assertj.assertj-core>3.12.2</version.org.assertj.assertj-core>
         <version.com.google.code.gson>2.8.5</version.com.google.code.gson>
         <version.org.awaitility>3.1.6</version.org.awaitility>
         <version.com.google.guava>25.0-jre</version.com.google.guava>
         <version.io.jaegertracing.everything>0.35.5</version.io.jaegertracing.everything>
-        <version.org.wildfly.extras.creaper>1.6.1</version.org.wildfly.extras.creaper>
         <version.jakarta.platform.jakarta.jakartaee-api>8.0.0</version.jakarta.platform.jakarta.jakartaee-api>
+        <version.org.postgresql>42.2.8</version.org.postgresql>
     </properties>
 
     <dependencyManagement>
@@ -155,6 +155,17 @@
             </dependency>
             <dependency>
                 <groupId>org.jboss.eap.qe</groupId>
+                <artifactId>tooling-docker</artifactId>
+                <version>${project.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.eap.qe</groupId>
+                <artifactId>tooling-server-configuration</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.eap.qe</groupId>
                 <artifactId>server-utilities</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -163,6 +174,11 @@
                 <groupId>org.glassfish</groupId>
                 <artifactId>javax.json</artifactId>
                 <version>${version.org.glassfish.javax.json}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.eap.qe</groupId>
+                <artifactId>tooling-cpu-load</artifactId>
+                <version>${project.version}</version>
                 <scope>test</scope>
             </dependency>
             <!-- Awaitility is a small Java DSL for synchronizing (waiting for) asynchronous operations. It makes it easy to test asynchronous code. -->
@@ -176,6 +192,11 @@
                         <artifactId>junit</artifactId>
                     </exclusion>
                 </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${version.org.postgresql}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -218,7 +239,9 @@
         <profile>
             <id>download-wildfly</id>
             <activation>
-                <property><name>!jboss.home</name></property>
+                <property>
+                    <name>!jboss.home</name>
+                </property>
             </activation>
             <properties>
                 <jboss.home>${basedir}/target/jboss-as</jboss.home>
@@ -232,7 +255,9 @@
                             <execution>
                                 <id>unpack-jboss-as</id>
                                 <phase>generate-test-resources</phase>
-                                <goals><goal>unpack</goal></goals>
+                                <goals>
+                                    <goal>unpack</goal>
+                                </goals>
                                 <configuration>
                                     <artifactItems>
                                         <artifactItem>
@@ -255,7 +280,9 @@
                             <execution>
                                 <id>rename-unpacked-jboss-as</id>
                                 <phase>process-test-resources</phase>
-                                <goals><goal>run</goal></goals>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
                                 <configuration>
                                     <target>
                                         <delete dir="${project.build.directory}/jboss-as"/>
@@ -340,6 +367,12 @@
             <modules>
                 <module>microprofile-jwt</module>
                 <module>microprofile-open-api</module>
+            </modules>
+        </profile>
+        <profile>
+            <id>mp-ft</id>
+            <modules>
+                <module>microprofile-fault-tolerance</module>
             </modules>
         </profile>
     </profiles>

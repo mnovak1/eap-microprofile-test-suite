@@ -66,7 +66,7 @@ public class Docker extends ExternalResource {
         cmd.add(image);
 
         cmd.addAll(commandArguments);
-
+        System.out.println(cmd);
         System.out.println(Ansi.ansi().reset().a("Starting container ").fgCyan().a(name).reset()
                 .a(" with ID ").fgYellow().a(uuid).reset());
 

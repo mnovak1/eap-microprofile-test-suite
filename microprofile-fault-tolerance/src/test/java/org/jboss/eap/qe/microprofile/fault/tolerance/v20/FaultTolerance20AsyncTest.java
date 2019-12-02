@@ -1,20 +1,9 @@
 package org.jboss.eap.qe.microprofile.fault.tolerance.v20;
 
-import io.restassured.RestAssured;
-import org.eclipse.microprofile.faulttolerance.exceptions.FaultToleranceException;
-import org.eclipse.microprofile.faulttolerance.exceptions.TimeoutException;
-import org.jboss.arquillian.container.test.api.Deployment;
-import org.jboss.arquillian.container.test.api.RunAsClient;
-import org.jboss.arquillian.junit.Arquillian;
-import org.jboss.eap.qe.microprofile.fault.tolerance.MicroProfileFaultToleranceTestParent;
-import org.jboss.eap.qe.microprofile.fault.tolerance.deployments.v20.AsyncHelloService;
-import org.jboss.shrinkwrap.api.Archive;
-import org.jboss.shrinkwrap.api.ShrinkWrap;
-import org.jboss.shrinkwrap.api.asset.EmptyAsset;
-import org.jboss.shrinkwrap.api.asset.StringAsset;
-import org.jboss.shrinkwrap.api.spec.WebArchive;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import static io.restassured.RestAssured.get;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.hamcrest.Matchers.containsString;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -28,12 +17,26 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
-import static org.hamcrest.Matchers.containsString;
+import org.eclipse.microprofile.faulttolerance.exceptions.FaultToleranceException;
+import org.eclipse.microprofile.faulttolerance.exceptions.TimeoutException;
+import org.jboss.arquillian.container.test.api.Deployment;
+import org.jboss.arquillian.container.test.api.RunAsClient;
+import org.jboss.arquillian.junit.Arquillian;
+import org.jboss.eap.qe.microprofile.fault.tolerance.util.MicroProfileFaultToleranceServerConfiguration;
+import org.jboss.eap.qe.microprofile.fault.tolerance.deployments.v20.AsyncHelloService;
+import org.jboss.eap.qe.microprofile.tooling.server.configuration.creaper.ManagementClientRelatedException;
+import org.jboss.shrinkwrap.api.Archive;
+import org.jboss.shrinkwrap.api.ShrinkWrap;
+import org.jboss.shrinkwrap.api.asset.EmptyAsset;
+import org.jboss.shrinkwrap.api.asset.StringAsset;
+import org.jboss.shrinkwrap.api.spec.WebArchive;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
 @RunWith(Arquillian.class)
-public class FaultTolerance20AsyncTest extends MicroProfileFaultToleranceTestParent {
+public class FaultTolerance20AsyncTest {
 
     public static final String APPLICATION_NAME = FaultTolerance20AsyncTest.class.getSimpleName();
     public static final String BASE_APPLICATION_URL = "http://localhost:8080/" + APPLICATION_NAME;
@@ -45,45 +48,82 @@ public class FaultTolerance20AsyncTest extends MicroProfileFaultToleranceTestPar
                 "hystrix.threadpool.default.maximumSize=40\n" +
                 "hystrix.threadpool.default.allowMaximumSizeToDivergeFromCoreSize=true\n";
         return ShrinkWrap.create(WebArchive.class, APPLICATION_NAME + ".war")
-                .addPackages(true, AsyncHelloService.class.getPackage())
                 .addClasses(TimeoutException.class, FaultToleranceException.class)
+                .addPackages(true, AsyncHelloService.class.getPackage())
                 .addAsManifestResource(EmptyAsset.INSTANCE, "beans.xml")
                 .addAsManifestResource(new StringAsset(mpConfig), "microprofile-config.properties");
     }
 
+    @BeforeClass
+    public static void setup() throws ManagementClientRelatedException {
+        MicroProfileFaultToleranceServerConfiguration.enableFaultTolerance();
+    }
+
+    /**
+     * @tpTestDetails Deploy MP FT application with 1 second @Timeout and @Asynchronous annotation on service method and call
+     *                it. There is no fail.
+     * @tpPassCrit Method returns expected output as finished in defined timeout.
+     * @tpSince EAP 7.4.0.CD19
+     */
     @Test
     @RunAsClient
     public void timeoutOkCompletionStage() {
-        RestAssured.when().get(BASE_APPLICATION_URL + "/async?operation=timeout").then().assertThat()
+        get(BASE_APPLICATION_URL + "/async?operation=timeout").then().assertThat()
                 .body(containsString("Hello from @Timeout method"));
     }
 
+    /**
+     * @tpTestDetails Deploy MP FT application with 1 second @Timeout and @Asynchronous annotation on service method and call
+     *                it. Call takes longer than defined timeout.
+     * @tpPassCrit Fallback method is called as not finished in defined timeout
+     * @tpSince EAP 7.4.0.CD19
+     */
     @Test
     @RunAsClient
     public void timeoutFailureCompletionStage() {
-        RestAssured.when().get(BASE_APPLICATION_URL + "/async?operation=timeout&fail=true").then().assertThat()
+        get(BASE_APPLICATION_URL + "/async?operation=timeout&fail=true").then().assertThat()
                 .body(containsString("Fallback Hello"));
     }
 
+    /**
+     * @tpTestDetails Deploy MP FT application with 1 second @Timeout, @BulkHead (hystrix.threadpool.default.maximumSize=40)
+     *                and @Asynchronous annotation on service method and call 40 times. Call takes longer than defined timeout.
+     * @tpPassCrit All 40 invocation ends in Fallback method as timeout was exceeded
+     * @tpSince EAP 7.4.0.CD19
+     */
     @Test
     @RunAsClient
     public void bulkheadTimeoutFailure() throws InterruptedException {
         Map<String, Integer> expectedResponses = new HashMap<>();
         expectedResponses.put("Hello from @Bulkhead @Timeout method", 0);
         expectedResponses.put("Fallback Hello", 40);
-        // timeout takes effect, there will be 40 fallbacks (project-defaults.yml.. maximumSize: 40)
+        // timeout takes effect, there will be 40 fallbacks (hystrix.threadpool.default.maximumSize: 40)
         // 41 invocations would already trigger fallback rejection
-        // no matter @Bulkhead has e.g. value = 15 and waitingTaskQueue = 15
+        // no matter @Bulkhead has e.g. value = 15 and waitingTaskQueue = 5
         testBulkhead(40, BASE_APPLICATION_URL + "/async?operation=bulkhead-timeout&fail=true", expectedResponses);
     }
 
+    /**
+     * @tpTestDetails Deploy MP FT application with 1 second @Timeout, @BulkHead (hystrix.threadpool.default.maximumSize=40)
+     *                and @Asynchronous and @Retry annotations on service method and call it. Call takes less than defined
+     *                timeout.
+     * @tpPassCrit Invocation succeeds as fail was present
+     * @tpSince EAP 7.4.0.CD19
+     */
     @Test
     @RunAsClient
     public void bulkheadTimeoutRetryOK() {
-        RestAssured.when().get(BASE_APPLICATION_URL + "/async?operation=bulkhead-timeout-retry").then().assertThat()
+        get(BASE_APPLICATION_URL + "/async?operation=bulkhead-timeout-retry").then().assertThat()
                 .body(containsString("Hello from @Bulkhead @Timeout @Retry method"));
     }
 
+    /**
+     * @tpTestDetails Deploy MP FT application with 1 second @Timeout, @Retry, @BulkHead
+     *                (hystrix.threadpool.default.maximumSize=40)
+     *                and @Asynchronous annotation on service method and call 40 times. Call takes longer than defined timeout.
+     * @tpPassCrit All 40 invocation ends in Fallback method as timeout and retires were exceeded
+     * @tpSince EAP 7.4.0.CD19
+     */
     @Test
     @RunAsClient
     public void bulkheadTimeoutRetryFailure() throws InterruptedException {
@@ -94,7 +134,8 @@ public class FaultTolerance20AsyncTest extends MicroProfileFaultToleranceTestPar
         testBulkhead(40, BASE_APPLICATION_URL + "/async?operation=bulkhead-timeout-retry&fail=true", expectedResponses);
     }
 
-    private static void testBulkhead(int parallelRequests, String url, Map<String, Integer> expectedResponses) throws InterruptedException {
+    private static void testBulkhead(int parallelRequests, String url, Map<String, Integer> expectedResponses)
+            throws InterruptedException {
         Set<String> violations = Collections.newSetFromMap(new ConcurrentHashMap<>());
         Queue<String> seenResponses = new ConcurrentLinkedQueue<>();
 
@@ -102,7 +143,7 @@ public class FaultTolerance20AsyncTest extends MicroProfileFaultToleranceTestPar
         for (int i = 0; i < parallelRequests; i++) {
             executor.submit(() -> {
                 try {
-                    seenResponses.add(RestAssured.when().get(url).asString());
+                    seenResponses.add(get(url).asString());
                 } catch (Exception e) {
                     violations.add("Unexpected exception: " + e.getMessage());
                 }
@@ -126,71 +167,124 @@ public class FaultTolerance20AsyncTest extends MicroProfileFaultToleranceTestPar
             }
             if (count != expectedResponse.getValue()) {
                 violations.add("Expected to see " + expectedResponse.getValue() + " occurrence(s) but seen " + count
-                                       + ": " + expectedResponse.getKey());
+                        + ": " + expectedResponse.getKey());
             }
         }
         assertThat(violations).isEmpty();
     }
 
+    /**
+     * @tpTestDetails Deploy MP FT application with @Retry, @CircuitBreaker and @Fallback annotation on service method.
+     *                Call 20x fail URL, circuit is OPEN. Call 10x correct URL on opened circuit -> still returns fallback
+     *                response.
+     *                The window of 20 calls now contains 10 fail and 10 correct responses, this equals 0.5
+     *                failureRatio. @CircuitBreaker delay
+     *                is 5 seconds default.
+     * @tpPassCrit Call after 5s and check circuit is CLOSED.OK response is returned
+     * @tpSince EAP 7.4.0.CD19
+     */
     @Test
     @RunAsClient
     public void retryCircuitBreakerFailure() throws IOException, InterruptedException {
         testCircuitBreakerFailure(BASE_APPLICATION_URL + "/async?operation=retry-circuit-breaker",
-                                  "Fallback Hello",
-                                  "Hello from @Retry @CircuitBreaker method");
+                "Fallback Hello",
+                "Hello from @Retry @CircuitBreaker method");
     }
 
+    /**
+     * @tpTestDetails Deploy MP FT application with @Timeout, @CircuitBreaker and @Fallback annotation on service method.
+     * @tpPassCrit Call and check circuit is CLOSED. OK response is returned
+     * @tpSince EAP 7.4.0.CD19
+     */
     @Test
     @RunAsClient
     public void retryCircuitBreakerTimeoutOK() {
-        RestAssured.when().get(BASE_APPLICATION_URL + "/async?operation=retry-circuit-breaker-timeout").then().assertThat()
+        get(BASE_APPLICATION_URL + "/async?operation=retry-circuit-breaker-timeout").then().assertThat()
                 .body(containsString("Hello from @Retry @CircuitBreaker @Timeout method"));
     }
 
+    /**
+     * @tpTestDetails Deploy MP FT application with @Timeout, @CircuitBreaker and @Fallback annotation on service method.
+     *                Call 20x fail URL, circuit is OPEN. Call 10x correct URL on opened circuit -> still returns fallback
+     *                response.
+     *                The window of 20 calls now contains 10 fail and 10 correct responses, this equals 0.5
+     *                failureRatio. @CircuitBreaker delay
+     *                is 5 seconds default.
+     * @tpPassCrit Call after 5s and check circuit is CLOSED.OK response is returned
+     * @tpSince EAP 7.4.0.CD19
+     */
     @Test
     @RunAsClient
     public void retryCircuitBreakerTimeoutFailure() throws IOException, InterruptedException {
         testCircuitBreakerFailure(BASE_APPLICATION_URL + "/async?operation=retry-circuit-breaker-timeout",
-                                  "Fallback Hello",
-                                  "Hello from @Retry @CircuitBreaker @Timeout method");
+                "Fallback Hello",
+                "Hello from @Retry @CircuitBreaker @Timeout method");
     }
 
-    private static void testCircuitBreakerFailure(String url, String expectedFallbackResponse, String expectedOkResponse) throws IOException, InterruptedException {
+    private static void testCircuitBreakerFailure(String url, String expectedFallbackResponse, String expectedOkResponse)
+            throws IOException, InterruptedException {
         // call 20x fail URL, circuit is OPEN
         for (int i = 0; i < 20; i++) {
-            RestAssured.when().get(url + "&fail=true").then().assertThat().body(containsString(expectedFallbackResponse));
+            get(url + "&fail=true").then().assertThat().body(containsString(expectedFallbackResponse));
         }
         // call 10x correct URL on opened circuit -> still returns fallback response
         for (int i = 0; i < 10; i++) {
-            RestAssured.when().get(url).then().assertThat().body(containsString(expectedFallbackResponse));
+            get(url).then().assertThat().body(containsString(expectedFallbackResponse));
         }
         // the window of 20 calls now contains 10 fail and 10 correct responses, this equals 0.5 failureRatio
         // @CircuitBreaker.delay is 5 seconds default, then circuit is CLOSED and OK response is returned
         Thread.sleep(5000L);
         await().atMost(1, TimeUnit.SECONDS).untilAsserted(() -> {
-            RestAssured.when().get(url).then().assertThat().body(containsString(expectedOkResponse));
+            get(url).then().assertThat().body(containsString(expectedOkResponse));
         });
     }
 
+    /**
+     * @tpTestDetails Deploy MP FT application with @Timeout, @Retry and @Fallback annotation on service method. Call
+     *                takes longer than 1 sec.
+     * @tpPassCrit Check that Fallback method is called.
+     * @tpSince EAP 7.4.0.CD19
+     */
     @Test
     @RunAsClient
     public void retryTimeout() {
-        RestAssured.when().get(BASE_APPLICATION_URL + "/async?operation=retry-timeout&fail=true").then().assertThat()
+        get(BASE_APPLICATION_URL + "/async?operation=retry-timeout&fail=true").then().assertThat()
                 .body(containsString("Fallback Hello"));
     }
 
+    /**
+     * @tpTestDetails Deploy MP FT application with @Timeout, @CircuitBreaker and @Fallback annotation on service method. Call
+     *                takes less than 1 sec.
+     * @tpPassCrit Check that OK response is returned as there is no failure
+     * @tpSince EAP 7.4.0.CD19
+     */
     @Test
     @RunAsClient
     public void timeoutCircuitBreakerOK() {
-        RestAssured.when().get(BASE_APPLICATION_URL + "/async?operation=timeout-circuit-breaker").then().assertThat()
+        get(BASE_APPLICATION_URL + "/async?operation=timeout-circuit-breaker").then().assertThat()
                 .body(containsString("Hello from @Timeout @CircuitBreaker method"));
     }
 
+    /**
+     * @tpTestDetails Deploy MP FT application with @Timeout, @CircuitBreaker and @Fallback annotation on service method.
+     *                Call 20x fail URL (call takes longer then 1 second), circuit is OPEN. Call 10x correct URL on opened
+     *                circuit -> still returns fallback response.
+     *                The window of 20 calls now contains 10 fail and 10 correct responses, this equals 0.5
+     *                failureRatio. @CircuitBreaker delay
+     *                is 5 seconds default.
+     * @tpPassCrit Call after 5s and check circuit is CLOSED.OK response is returned
+     * @tpSince EAP 7.4.0.CD19
+     */
     @Test
     @RunAsClient
     public void timeoutCircuitBreakerFailure() throws IOException, InterruptedException {
         testCircuitBreakerFailure(BASE_APPLICATION_URL + "/async?operation=timeout-circuit-breaker",
-                                  "Fallback Hello",
-                                  "Hello from @Timeout @CircuitBreaker method");
+                "Fallback Hello",
+                "Hello from @Timeout @CircuitBreaker method");
+    }
+
+    @AfterClass
+    public static void tearDown() throws ManagementClientRelatedException {
+        MicroProfileFaultToleranceServerConfiguration.disableFaultTolerance();
     }
 }

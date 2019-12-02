@@ -1,21 +1,7 @@
 package org.jboss.eap.qe.microprofile.fault.tolerance.v20;
 
-import com.google.common.collect.Range;
-import io.restassured.RestAssured;
-import org.eclipse.microprofile.faulttolerance.exceptions.FaultToleranceException;
-import org.eclipse.microprofile.faulttolerance.exceptions.TimeoutException;
-import org.jboss.arquillian.container.test.api.Deployment;
-import org.jboss.arquillian.container.test.api.RunAsClient;
-import org.jboss.arquillian.junit.Arquillian;
-import org.jboss.eap.qe.microprofile.fault.tolerance.MicroProfileFaultToleranceTestParent;
-import org.jboss.eap.qe.microprofile.fault.tolerance.deployments.v20.AsyncHelloService;
-import org.jboss.shrinkwrap.api.Archive;
-import org.jboss.shrinkwrap.api.ShrinkWrap;
-import org.jboss.shrinkwrap.api.asset.EmptyAsset;
-import org.jboss.shrinkwrap.api.asset.StringAsset;
-import org.jboss.shrinkwrap.api.spec.WebArchive;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -29,11 +15,30 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
+import org.eclipse.microprofile.faulttolerance.exceptions.FaultToleranceException;
+import org.eclipse.microprofile.faulttolerance.exceptions.TimeoutException;
+import org.jboss.arquillian.container.test.api.Deployment;
+import org.jboss.arquillian.container.test.api.RunAsClient;
+import org.jboss.arquillian.junit.Arquillian;
+import org.jboss.eap.qe.microprofile.fault.tolerance.util.MicroProfileFaultToleranceServerConfiguration;
+import org.jboss.eap.qe.microprofile.fault.tolerance.deployments.v20.AsyncHelloService;
+import org.jboss.eap.qe.microprofile.tooling.server.configuration.creaper.ManagementClientRelatedException;
+import org.jboss.shrinkwrap.api.Archive;
+import org.jboss.shrinkwrap.api.ShrinkWrap;
+import org.jboss.shrinkwrap.api.asset.EmptyAsset;
+import org.jboss.shrinkwrap.api.asset.StringAsset;
+import org.jboss.shrinkwrap.api.spec.WebArchive;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
+import com.google.common.collect.Range;
+
+import io.restassured.RestAssured;
 
 @RunWith(Arquillian.class)
-public class FaultTolerance20AsyncPartialTest extends MicroProfileFaultToleranceTestParent {
+public class FaultTolerance20AsyncPartialTest {
 
     public static final String APPLICATION_NAME = FaultTolerance20AsyncPartialTest.class.getSimpleName();
     public static final String BASE_APPLICATION_URL = "http://localhost:8080/" + APPLICATION_NAME;
@@ -51,11 +56,17 @@ public class FaultTolerance20AsyncPartialTest extends MicroProfileFaultTolerance
                 .addAsManifestResource(new StringAsset(mpConfig), "microprofile-config.properties");
     }
 
+    @BeforeClass
+    public static void setup() throws ManagementClientRelatedException {
+        MicroProfileFaultToleranceServerConfiguration.enableFaultTolerance();
+    }
+
     /**
-     * Test sends 40 parallel requests. There are annotations on service:
-     * timeout 1s and bulkhead (of maximum number of concurrent calls = 15 and 5 queued).
-     * Every even call is made to timeout. Calls above 20 fall-back.
-     * Tests expects maximal success of 20 messages (those not timeout-ed + not fallback-ed).
+     * @tpTestDetails Test sends 40 parallel requests. There are annotations on service:
+     *                timeout 1s and bulkhead (of maximum number of concurrent calls = 15 and 5 queued).
+     *                Every even call is made to timeout. Calls above 20 fall-back.
+     * @tpPassCrit Tests expects maximal success of 20 messages (those not timeout-ed + not fallback-ed).
+     * @tpSince EAP 7.4.0.CD19
      */
     @Test
     @RunAsClient
@@ -67,10 +78,11 @@ public class FaultTolerance20AsyncPartialTest extends MicroProfileFaultTolerance
     }
 
     /**
-     * Test sends 40 parallel requests. There are annotations on service:
-     * timeout 1s and bulkhead (of maximum number of concurrent calls = 5 and 5 queued).
-     * Every even call is made to timeout. Calls above 20 fall-back.
-     * Tests expects maximal success of 20 messages (those not timeout-ed + not fallback-ed).
+     * @tpTestDetails Test sends 40 parallel requests. There are annotations on service:
+     *                timeout 1s and bulkhead (of maximum number of concurrent calls = 5 and 5 queued).
+     *                Every even call is made to timeout. Calls above 20 fall-back.
+     * @tpPassCrit Tests expects maximal success of 20 messages (those not timeout-ed + not fallback-ed).
+     * @tpSince EAP 7.4.0.CD19
      */
     @Test
     @RunAsClient
@@ -82,10 +94,11 @@ public class FaultTolerance20AsyncPartialTest extends MicroProfileFaultTolerance
     }
 
     /**
-     * Test sends 20 parallel requests. There are annotations on service:
-     * timeout 1s, bulkhead (of maximum number of concurrent calls = 5 and 5 queued), retry
-     * 5 requests invoke timeout exception immediately, 5 requests time-out. Calls above 10 fall-back.
-     * Tests expects maximal success of 10 messages (those without exception, not timeout-ed + not fallback-ed).
+     * @tpTestDetails Test sends 20 parallel requests. There are annotations on service:
+     *                timeout 1s, bulkhead (of maximum number of concurrent calls = 5 and 5 queued), retry
+     *                5 requests invoke timeout exception immediately, 5 requests time-out. Calls above 10 fall-back.
+     * @tpPassCrit Tests expects maximal success of 10 messages (those without exception, not timeout-ed + not fallback-ed).
+     * @tpSince EAP 7.4.0.CD19
      */
     @Test
     @RunAsClient
@@ -97,10 +110,11 @@ public class FaultTolerance20AsyncPartialTest extends MicroProfileFaultTolerance
     }
 
     /**
-     * Test sends 20 parallel requests. There are annotations on service:
-     * timeout 1s, bulkhead (of maximum number of concurrent calls = 15 and 5 queued), retry
-     * 5 requests invoke timeout exception immediately, 5 requests time-out.
-     * Tests expects maximal success of 10 messages (those without exception, not timeout-ed).
+     * @tpTestDetails Test sends 20 parallel requests. There are annotations on service:
+     *                timeout 1s, bulkhead (of maximum number of concurrent calls = 15 and 5 queued), retry
+     *                5 requests invoke timeout exception immediately, 5 requests time-out.
+     * @tpPassCrit Tests expects maximal success of 10 messages (those without exception, not timeout-ed).
+     * @tpSince EAP 7.4.0.CD19
      */
     @Test
     @RunAsClient
@@ -111,7 +125,8 @@ public class FaultTolerance20AsyncPartialTest extends MicroProfileFaultTolerance
         testPartial(20, BASE_APPLICATION_URL + "/partial?operation=bulkhead15q5-timeout-retry&counter=", expectedResponses);
     }
 
-    private static void testPartial(int parallelRequests, String url, Map<String, Range<Integer>> expectedResponses) throws InterruptedException {
+    private static void testPartial(int parallelRequests, String url, Map<String, Range<Integer>> expectedResponses)
+            throws InterruptedException {
         Set<String> violations = Collections.newSetFromMap(new ConcurrentHashMap<>());
         Queue<String> seenResponses = new ConcurrentLinkedQueue<>();
 
@@ -144,18 +159,20 @@ public class FaultTolerance20AsyncPartialTest extends MicroProfileFaultTolerance
             }
             if (!expectedResponse.getValue().contains(count)) {
                 violations.add("Expected to see " + expectedResponse.getValue() + " occurrence(s) but seen " + count
-                                       + ": " + expectedResponse.getKey());
+                        + ": " + expectedResponse.getKey());
             }
         }
         assertThat(violations).isEmpty();
     }
 
     /**
-     * Test sends 16 parallel requests. There are annotations on service:
-     * Retry(retryOn = IOException.class), CircuitBreaker(failOn = IOException.class,
-     * requestVolumeThreshold = 5, successThreshold = 3, delay = 2, delayUnit = ChronoUnit.SECONDS, failureRatio = 0.75)
-     * 4 requests pass, 12 invoke IOException.
-     * After that the circuit is open, after at most 3 seconds it is closed.
+     * @tpTestDetails Test sends 16 parallel requests. There are annotations on service:
+     *                Retry(retryOn = IOException.class), CircuitBreaker(failOn = IOException.class,
+     *                requestVolumeThreshold = 5, successThreshold = 3, delay = 2, delayUnit = ChronoUnit.SECONDS, failureRatio
+     *                = 0.75)
+     *                4 requests pass, 12 invoke IOException.
+     * @tpPassCrit After that the circuit is open, after at most 3 seconds it is closed.
+     * @tpSince EAP 7.4.0.CD19
      */
     @Test
     @RunAsClient
@@ -166,20 +183,23 @@ public class FaultTolerance20AsyncPartialTest extends MicroProfileFaultTolerance
         testPartial(16, BASE_APPLICATION_URL + "/partial?operation=retry-circuitbreaker&counter=", expectedResponses);
 
         // ensure circuit is opened (note number 88 does request correct behavior!)
-        String response2 = RestAssured.when().get(BASE_APPLICATION_URL + "/partial?operation=retry-circuitbreaker&counter=88").asString();
+        String response2 = RestAssured.when().get(BASE_APPLICATION_URL + "/partial?operation=retry-circuitbreaker&counter=88")
+                .asString();
         assertThat(response2).isEqualTo("Fallback Hello88");
         // ensure circuit is closed
         await().atMost(3, TimeUnit.SECONDS).untilAsserted(() -> {
-            String response = RestAssured.when().get(BASE_APPLICATION_URL + "/partial?operation=retry-circuitbreaker&counter=88").asString();
+            String response = RestAssured.when()
+                    .get(BASE_APPLICATION_URL + "/partial?operation=retry-circuitbreaker&counter=88").asString();
             assertThat(response).isEqualTo("Hello from @Retry @CircuitBreaker method88");
         });
     }
 
     /**
-     * Test sends 20 parallel requests. There are annotations on service:
-     * Retry(maxRetries = 2), CircuitBreaker(failOn = TimeoutException.class), Timeout
-     * 5 requests pass, 10 invoke TimeoutException, 5 requests time-out.
-     * After that the circuit is open, after at most 6 seconds it is closed.
+     * @tpTestDetails Test sends 20 parallel requests. There are annotations on service:
+     *                Retry(maxRetries = 2), CircuitBreaker(failOn = TimeoutException.class), Timeout
+     *                5 requests pass, 10 invoke TimeoutException, 5 requests time-out.
+     * @tpPassCrit After that the circuit is open, after at most 6 seconds it is closed.
+     * @tpSince EAP 7.4.0.CD19
      */
     @Test
     @RunAsClient
@@ -190,12 +210,19 @@ public class FaultTolerance20AsyncPartialTest extends MicroProfileFaultTolerance
         testPartial(20, BASE_APPLICATION_URL + "/partial?operation=retry-circuitbreaker-timeout&counter=", expectedResponses);
 
         // ensure circuit is opened (note number 99 does request correct behavior!)
-        String response2 = RestAssured.when().get(BASE_APPLICATION_URL + "/partial?operation=retry-circuitbreaker-timeout&counter=99").asString();
+        String response2 = RestAssured.when()
+                .get(BASE_APPLICATION_URL + "/partial?operation=retry-circuitbreaker-timeout&counter=99").asString();
         assertThat(response2).isEqualTo("Fallback Hello99");
         // ensure circuit is closed
         await().atMost(6000, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-            String response = RestAssured.when().get(BASE_APPLICATION_URL + "/partial?operation=retry-circuitbreaker-timeout&counter=99").asString();
+            String response = RestAssured.when()
+                    .get(BASE_APPLICATION_URL + "/partial?operation=retry-circuitbreaker-timeout&counter=99").asString();
             assertThat(response).isEqualTo("Hello from @Retry @CircuitBreaker @Timeout method99");
         });
+    }
+
+    @AfterClass
+    public static void tearDown() throws ManagementClientRelatedException {
+        MicroProfileFaultToleranceServerConfiguration.disableFaultTolerance();
     }
 }
